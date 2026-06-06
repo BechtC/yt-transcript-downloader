@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Transcript Downloader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
+  <header class="border-b border-gray-800 px-6 py-4">
+    <div class="max-w-3xl mx-auto flex items-center gap-3">
+      <svg class="w-7 h-7 text-red-500" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.7 15.5V8.5l6.3 3.5-6.3 3.5z"/>
+      </svg>
+      <h1 class="text-xl font-semibold tracking-tight">YouTube Transcript Downloader</h1>
+    </div>
+  </header>
+  <main class="max-w-3xl mx-auto px-6 py-8 space-y-8">
+    <section class="bg-gray-900 rounded-xl p-6 space-y-4">
+      <h2 class="text-lg font-medium text-gray-200">Kanal scannen</h2>
+      <p class="text-sm text-gray-400">Gib die URL eines YouTube-Kanals ein. Alle Transkripte werden automatisch heruntergeladen.</p>
+      <div class="flex gap-3">
+        <input id="channelUrl" type="url" placeholder="https://www.youtube.com/@KanalName"
+          class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent" />
+        <select id="language" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500">
+          <option value="de">DE</option>
+          <option value="en">EN</option>
+          <option value="fr">FR</option>
+          <option value="es">ES</option>
+        </select>
+        <button id="scanBtn" onclick="startScan()"
+          class="bg-red-600 hover:bg-red-500 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors">Scannen</button>
+      </div>
+      <div id="scanResult" class="hidden">
+        <div class="bg-gray-800 rounded-lg p-4 flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-200" id="scanChannelName"></p>
+            <p class="text-sm text-gray-400" id="scanVideoCount"></p>
+          </div>
+          <button onclick="confirmDownload()"
+            class="bg-green-600 hover:bg-green-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition-colors">Download starten</button>
+        </div>
+      </div>
+      <div id="spinner" class="hidden flex items-center gap-2 text-sm text-gray-400">
+        <svg class="animate-spin w-4 h-4 text-red-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+        </svg>
+        <span id="spinnerText">Scanne Kanal...</span>
+      </div>
+      <div id="errorBox" class="hidden bg-red-900/40 border border-red-700 rounded-lg px-4 py-3 text-sm text-red-300"></div>
+    </section>
+    <section id="progressSection" class="hidden bg-gray-900 rounded-xl p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-medium text-gray-200">Download-Fortschritt</h2>
+        <div class="flex items-center gap-2">
+          <span id="progressLabel" class="text-sm text-gray-400">0 / 0</span>
+          <button id="pauseBtn" onclick="pauseDownload()"
+            class="text-xs bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1 rounded-lg transition-colors">Pause</button>
+          <button id="cancelBtn" onclick="cancelDownload()"
+            class="text-xs bg-gray-700 hover:bg-red-700 text-white px-3 py-1 rounded-lg transition-colors">Abbrechen</button>
+        </div>
+      </div>
+      <div class="w-full bg-gray-800 rounded-full h-2.5">
+        <div id="progressBar" class="bg-red-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+      <p id="progressStatus" class="text-sm text-gray-400">Bereite Download vor...</p>
+      <div id="failedSection" class="hidden">
+        <button onclick="toggleFailed()" class="text-sm text-yellow-400 hover:text-yellow-300 flex items-center gap-1">
+          <span id="failedToggleIcon">&#9658;</span>
+          <span id="failedCount">0 fehlgeschlagen</span>
+        </button>
+        <ul id="failedList" class="hidden mt-2 space-y-1 text-xs text-gray-500 max-h-40 overflow-y-auto"></ul>
+      </div>
+    </section>
+    <section class="bg-gray-900 rounded-xl p-6 space-y-4">
+      <h2 class="text-lg font-medium text-gray-200">Heruntergeladene Kanaele</h2>
+      <div id="channelList"><p class="text-sm text-gray-500">Noch keine Transkripte heruntergeladen.</p></div>
+    </section>
+  </main>
+  <script>
+    let currentJobId = null, currentTotal = 0, failedVideos = [];
+    async function startScan() {
+      const url = document.getElementById('channelUrl').value.trim();
+      if (!url) return;
+      setUiState('scanning');
+      try {
+        const res = await fetch(`/api/channels/scan?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Scan fehlgeschlagen');
+        currentJobId = data.job_id; currentTotal = data.video_count;
+        document.getElementById('scanChannelName').textContent = `Kanal: ${data.channel_name}`;
+        document.getElementById('scanVideoCount').textContent = `${data.video_count} Videos gefunden`;
+        setUiState('confirm');
+      } catch (e) { showError(e.message); setUiState('idle'); }
+    }
+    async function confirmDownload() {
+      if (!currentJobId) return;
+      const language = document.getElementById('language').value;
+      failedVideos = [];
+      ['failedSection'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      document.getElementById('failedList').innerHTML = '';
+      document.getElementById('progressBar').style.width = '0%';
+      document.getElementById('progressLabel').textContent = '0 / 0';
+      document.getElementById('progressStatus').textContent = 'Bereite Download vor...';
+      setUiState('downloading');
+      try {
+        await fetch(`/api/jobs/${currentJobId}/confirm`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({language})
+        });
+        listenToProgress(currentJobId, currentTotal);
+      } catch (e) { showError(e.message); setUiState('idle'); }
+    }
+    function listenToProgress(jobId, total) {
+      const es = new EventSource(`/api/jobs/${jobId}/stream`);
+      es.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        const pct = total > 0 ? Math.round(((data.current || 0) / total) * 100) : 0;
+        document.getElementById('progressBar').style.width = `${pct}%`;
+        document.getElementById('progressLabel').textContent = `${data.current || 0} / ${total}`;
+        if (data.last_file) document.getElementById('progressStatus').textContent = `Zuletzt: ${data.last_file}`;
+        if (data.failed_videos?.length) { failedVideos = data.failed_videos; updateFailedLog(); }
+        if (['DONE','ERROR','CANCELLED'].includes(data.state)) {
+          es.close();
+          const msg = data.state === 'DONE' ? `Fertig - ${data.success_count} erfolgreich`
+            : data.state === 'CANCELLED' ? `Abgebrochen - ${data.success_count} heruntergeladen`
+            : `Fehler: ${data.error || 'Unbekannter Fehler'}`;
+          document.getElementById('progressStatus').textContent = msg;
+          document.getElementById('pauseBtn').disabled = true;
+          document.getElementById('cancelBtn').disabled = true;
+          loadChannelList();
+        }
+      };
+      es.onerror = () => es.close();
+    }
+    async function pauseDownload() {
+      if (!currentJobId) return;
+      const pauseBtn = document.getElementById('pauseBtn');
+      const isPaused = pauseBtn.textContent === 'Fortsetzen';
+      if (isPaused) {
+        await fetch(`/api/jobs/${currentJobId}/resume`, {method:'POST'});
+        pauseBtn.textContent = 'Pause';
+        pauseBtn.className = 'text-xs bg-yellow-600 hover:bg-yellow-500 text-white px-3 py-1 rounded-lg transition-colors';
+        document.getElementById('progressStatus').textContent = 'Download laeuft...';
+      } else {
+        await fetch(`/api/jobs/${currentJobId}/pause`, {method:'POST'});
+        pauseBtn.textContent = 'Fortsetzen';
+        pauseBtn.className = 'text-xs bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded-lg transition-colors';
+        document.getElementById('progressStatus').textContent = 'Pausiert';
+      }
+    }
+    async function cancelDownload() {
+      if (!currentJobId) return;
+      if (!confirm('Download wirklich abbrechen? Bereits heruntergeladene Transkripte bleiben erhalten.')) return;
+      await fetch(`/api/jobs/${currentJobId}/cancel`, {method:'POST'});
+      document.getElementById('progressStatus').textContent = 'Abgebrochen';
+      document.getElementById('pauseBtn').disabled = true;
+      document.getElementById('cancelBtn').disabled = true;
+      loadChannelList();
+    }
+    function updateFailedLog() {
+      document.getElementById('failedSection').classList.remove('hidden');
+      document.getElementById('failedCount').textContent = `${failedVideos.length} fehlgeschlagen`;
+      document.getElementById('failedList').innerHTML = failedVideos.map(v =>
+        `<li class="truncate">${v.id} - ${v.reason}</li>`).join('');
+    }
+    function toggleFailed() {
+      const list = document.getElementById('failedList');
+      list.classList.toggle('hidden');
+      document.getElementById('failedToggleIcon').textContent = list.classList.contains('hidden') ? '&#9658;' : '&#9660;';
+    }
+    async function loadChannelList() {
+      try {
+        const data = await (await fetch('/api/channels')).json();
+        const container = document.getElementById('channelList');
+        if (!data.channels?.length) {
+          container.innerHTML = '<p class="text-sm text-gray-500">Noch keine Transkripte heruntergeladen.</p>';
+          return;
+        }
+        container.innerHTML = data.channels.map(ch =>
+          `<div class="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
+            <span class="text-sm text-gray-200">${ch.name}</span>
+            <span class="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">${ch.transcript_count} Transkripte</span>
+          </div>`).join('');
+      } catch {}
+    }
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.textContent = msg; box.classList.remove('hidden');
+    }
+    function setUiState(state) {
+      ['spinner','scanResult','errorBox'].forEach(id => document.getElementById(id).classList.add('hidden'));
+      const scanBtn = document.getElementById('scanBtn');
+      if (state === 'scanning') {
+        document.getElementById('spinner').classList.remove('hidden');
+        scanBtn.disabled = true;
+      } else if (state === 'confirm') {
+        document.getElementById('scanResult').classList.remove('hidden');
+        scanBtn.disabled = false;
+      } else if (state === 'downloading') {
+        document.getElementById('progressSection').classList.remove('hidden');
+        document.getElementById('spinner').classList.remove('hidden');
+      } else { scanBtn.disabled = false; }
+    }
+    loadChannelList();
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Secrets — niemals committen
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Output & Logs
+output/
+transcript_download.log
+
+# IDE
+.vscode/
+.idea/
+
+# Test-Artefakte
+.pytest_cache/
